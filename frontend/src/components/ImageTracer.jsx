@@ -1,11 +1,10 @@
-import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { UploadCloud, Image as ImageIcon, X, Trash2, CheckCircle2 } from 'lucide-react';
+import React, { useCallback, useState, useRef } from 'react';
+import { UploadCloud, X, Trash2, CheckCircle2 } from 'lucide-react';
 import './ImageTracer.css';
 
-export default function ImageTracer({ onPolygonUpdate }) {
+export default function ImageTracer({ parts, currentPoints, onPointsUpdate, onFinishPart }) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [points, setPoints] = useState([]); // Array of {x, y} relative to image dimensions
 
   const svgRef = useRef(null);
   const imgRef = useRef(null);
@@ -24,8 +23,7 @@ export default function ImageTracer({ onPolygonUpdate }) {
     if (file && file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file);
       setPreview(url);
-      setPoints([]);
-      onPolygonUpdate([]);
+      onPointsUpdate([]);
     }
   };
 
@@ -36,7 +34,7 @@ export default function ImageTracer({ onPolygonUpdate }) {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       processFile(e.dataTransfer.files[0]);
     }
-  }, [onPolygonUpdate]);
+  }, [onPointsUpdate]);
 
   const handleChange = (e) => {
     e.preventDefault();
@@ -47,39 +45,31 @@ export default function ImageTracer({ onPolygonUpdate }) {
 
   const clearImage = () => {
     setPreview(null);
-    setPoints([]);
-    onPolygonUpdate([]);
+    onPointsUpdate([]);
   };
 
   const clearPoints = () => {
-    setPoints([]);
-    onPolygonUpdate([]);
+    onPointsUpdate([]);
   };
 
   const handleSvgClick = (e) => {
     if (!svgRef.current || !imgRef.current) return;
     
-    // Get click coords relative to the SVG element
     const rect = svgRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // We want the coordinates relative to the center of the image to map naturally to 3D space
-    // Let's normalize them so the bounding box is around 1 unit
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // Determine a scale factor so the model doesn't come out massive or tiny
-    const scale = Math.max(rect.width, rect.height) / 5; // Arises from 3D unit mapping scale
+    // Scale mapping relative to image frame size
+    const scale = Math.max(rect.width, rect.height) / 5; 
     
     const normalizedX = (x - centerX) / scale;
-    // Y is inverted in 3D compared to browser DOM!
     const normalizedY = -(y - centerY) / scale;
 
     const newPoint = { px: x, py: y, nx: normalizedX, ny: normalizedY };
-    const newPoints = [...points, newPoint];
-    setPoints(newPoints);
-    onPolygonUpdate(newPoints);
+    onPointsUpdate([...currentPoints, newPoint]);
   };
 
   return (
@@ -115,30 +105,41 @@ export default function ImageTracer({ onPolygonUpdate }) {
               onClick={handleSvgClick}
               xmlns="http://www.w3.org/2000/svg"
             >
-              {points.length > 0 && (
+              {/* Render completed parts */}
+              {parts.map(part => (
                 <polygon 
-                  points={points.map(p => `${p.px},${p.py}`).join(' ')} 
+                  key={part.id}
+                  points={part.points.map(p => `${p.px},${p.py}`).join(' ')} 
+                  className="polygon-fill"
+                  style={{ fill: part.color, opacity: 0.5 }}
+                />
+              ))}
+
+              {/* Render current drawing points */}
+              {currentPoints.length > 0 && (
+                <polygon 
+                  points={currentPoints.map(p => `${p.px},${p.py}`).join(' ')} 
                   className="polygon-fill" 
                 />
               )}
-              {points.length > 1 && (
+              {currentPoints.length > 1 && (
                 <polyline 
-                  points={points.map(p => `${p.px},${p.py}`).join(' ')} 
+                  points={currentPoints.map(p => `${p.px},${p.py}`).join(' ')} 
                   className="line" 
                 />
               )}
-              {points.length > 2 && (
+              {currentPoints.length > 2 && (
                 <line 
-                  x1={points[points.length - 1].px} 
-                  y1={points[points.length - 1].py}
-                  x2={points[0].px}
-                  y2={points[0].py}
+                  x1={currentPoints[currentPoints.length - 1].px} 
+                  y1={currentPoints[currentPoints.length - 1].py}
+                  x2={currentPoints[0].px}
+                  y2={currentPoints[0].py}
                   className="line"
                   strokeDasharray="4"
                   opacity="0.5"
                 />
               )}
-              {points.map((p, i) => (
+              {currentPoints.map((p, i) => (
                 <circle key={i} cx={p.px} cy={p.py} className="point" />
               ))}
             </svg>
@@ -146,10 +147,18 @@ export default function ImageTracer({ onPolygonUpdate }) {
           
           <div className="workspace-controls">
             <button className="control-btn" onClick={clearImage}>
-              <X size={16} /> New Image
+               New Image
             </button>
-            <button className="control-btn danger" onClick={clearPoints}>
-              <Trash2 size={16} /> Clear Points
+            <button className="control-btn danger" onClick={clearPoints} disabled={currentPoints.length === 0}>
+               Clear Points
+            </button>
+            <button 
+                className="control-btn" 
+                onClick={onFinishPart} 
+                disabled={currentPoints.length < 3}
+                style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
+            >
+              <CheckCircle2 size={16} /> Finish Shape
             </button>
           </div>
         </div>
