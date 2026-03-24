@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, Center, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { CSG } from 'three-csg-ts';
-import { Box, Check } from 'lucide-react';
+import { OBJExporter } from 'three-stdlib';
+import { Box, Check, Download } from 'lucide-react';
 import './ModelViewer.css';
 
 // A single extruded part
@@ -78,6 +79,26 @@ function PartMesh({ part, isSelected, onSelect, onTransformUpdate }) {
 export default function ModelViewer({ parts, selectedPartId, onTransformUpdate, onSelectPart, triggerMerge, currentDrawingPoints }) {
   const [mergedGeometry, setMergedGeometry] = useState(null);
 
+  const handleExport = () => {
+    if (!mergedGeometry) return;
+    const mesh = new THREE.Mesh(mergedGeometry);
+    mesh.material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    
+    const exporter = new OBJExporter();
+    const result = exporter.parse(mesh);
+    
+    const blob = new Blob([result], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    link.href = url;
+    link.download = 'merged_model.obj';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // CSG Merge Logic
   useEffect(() => {
     if (!triggerMerge || parts.length < 2) return;
@@ -129,7 +150,10 @@ export default function ModelViewer({ parts, selectedPartId, onTransformUpdate, 
       <div className="viewer-container active-state">
         <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, background: '#10b981', padding: '0.5rem 1rem', borderRadius: '8px', display: 'flex', gap: '8px', color: 'white' }}>
           <Check size={20} /> Successfully Merged
-          <button onClick={() => setMergedGeometry(null)} style={{ marginLeft: '10px', background: 'white', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Edit Parts</button>
+          <button onClick={handleExport} style={{ marginLeft: '10px', padding: '0.2rem 0.5rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Download size={16} /> Export .OBJ
+          </button>
+          <button onClick={() => setMergedGeometry(null)} style={{ marginLeft: '10px', padding: '0.2rem 0.5rem', background: 'white', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Edit Parts</button>
         </div>
         <Canvas shadows dpr={[1, 2]} camera={{ fov: 50, position: [0, 0, 5] }}>
           <Stage environment="city" intensity={0.6}>

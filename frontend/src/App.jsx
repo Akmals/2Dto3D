@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Cuboid, PlusCircle, Trash } from 'lucide-react';
+import { Layers, Cuboid, PlusCircle, Trash, Eye, EyeOff } from 'lucide-react';
 import ImageTracer from './components/ImageTracer';
 import ModelViewer from './components/ModelViewer';
 import './App.css';
@@ -23,15 +23,16 @@ function App() {
       name: `Part ${parts.length + 1}`,
       color: LAYER_COLORS[parts.length % LAYER_COLORS.length],
       points: currentPoints,
+      visible: true,
       position: [0, 0, 0],   // 3D position
       rotation: [0, 0, 0],   // 3D rotation (euler)
       scale: [1, 1, 1],      // 3D stretching
       extrudeSettings: {
-        depth: 0.5,
+        depth: 0.1,
         bevelEnabled: true,
-        bevelSegments: 2,
-        bevelSize: 0.02,
-        bevelThickness: 0.02
+        bevelSegments: 10,
+        bevelSize: 0.1,
+        bevelThickness: 0.1
       }
     };
     
@@ -45,6 +46,10 @@ function App() {
     if (selectedPartId === id) setSelectedPartId(null);
   };
 
+  const toggleVisibility = (id) => {
+    setParts(parts.map(p => p.id === id ? { ...p, visible: !p.visible } : p));
+  };
+
   const updateSelectedPartSettings = (key, value) => {
     if (!selectedPartId) return;
     setParts(parts.map(p => {
@@ -55,6 +60,28 @@ function App() {
              ...p.extrudeSettings,
              [key]: value
           }
+        };
+      }
+      return p;
+    }));
+  };
+
+  const snapToPreviousPart = () => {
+    if (!selectedPartId) return;
+    const currentIndex = parts.findIndex(p => p.id === selectedPartId);
+    if (currentIndex <= 0) return;
+    
+    const prevPart = parts[currentIndex - 1];
+    const selectedPart = parts[currentIndex];
+    
+    // Rough estimate of where the front face of the previous part is, ignoring rotation
+    const prevFrontZ = prevPart.position[2] + prevPart.extrudeSettings.depth;
+    
+    setParts(parts.map(p => {
+      if (p.id === selectedPartId) {
+        return {
+          ...p,
+          position: [p.position[0], p.position[1], prevFrontZ]
         };
       }
       return p;
@@ -109,8 +136,14 @@ function App() {
                }}
              >
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: part.color }} />
-                  <span>{part.name}</span>
+                  <div 
+                    onClick={(e) => { e.stopPropagation(); toggleVisibility(part.id); }}
+                    style={{ cursor: 'pointer', color: part.visible ? '#fff' : '#888', display: 'flex', alignItems: 'center' }}
+                  >
+                    {part.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </div>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: part.color, opacity: part.visible ? 1 : 0.3 }} />
+                  <span style={{ opacity: part.visible ? 1 : 0.5 }}>{part.name}</span>
                </div>
                <Trash size={16} onClick={(e) => { e.stopPropagation(); deletePart(part.id) }} style={{ cursor: 'pointer', color: '#ef4444' }} />
              </div>
@@ -124,9 +157,10 @@ function App() {
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
                   <label>Thickness (Depth)</label>
+                  <span>{selectedPart.extrudeSettings.depth.toFixed(2)}</span>
                 </div>
                 <input 
-                  type="range" min="0.05" max="2.0" step="0.05" 
+                  type="range" min="0" max="5.0" step="0.05" 
                   value={selectedPart.extrudeSettings.depth} 
                   onChange={(e) => updateSelectedPartSettings('depth', parseFloat(e.target.value))}
                   style={{ width: '100%' }}
@@ -135,15 +169,26 @@ function App() {
 
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-                  <label>Edge Bevel / Curvature</label>
+                  <label>Expand (Bevel Size)</label>
+                  <span>{selectedPart.extrudeSettings.bevelSize.toFixed(2)}</span>
                 </div>
                 <input 
-                  type="range" min="0" max="0.2" step="0.01" 
+                  type="range" min="0" max="5.0" step="0.05" 
                   value={selectedPart.extrudeSettings.bevelSize} 
-                  onChange={(e) => {
-                     updateSelectedPartSettings('bevelSize', parseFloat(e.target.value));
-                     updateSelectedPartSettings('bevelThickness', parseFloat(e.target.value));
-                  }}
+                  onChange={(e) => updateSelectedPartSettings('bevelSize', parseFloat(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                  <label>Curvature Depth (Bevel Thickness)</label>
+                  <span>{selectedPart.extrudeSettings.bevelThickness.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0" max="5.0" step="0.05" 
+                  value={selectedPart.extrudeSettings.bevelThickness} 
+                  onChange={(e) => updateSelectedPartSettings('bevelThickness', parseFloat(e.target.value))}
                   style={{ width: '100%' }}
                 />
               </div>
@@ -151,18 +196,28 @@ function App() {
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
                   <label>Smoothness (Bevel Segments)</label>
+                  <span>{selectedPart.extrudeSettings.bevelSegments}</span>
                 </div>
                 <input 
-                  type="range" min="1" max="10" step="1" 
+                  type="range" min="1" max="64" step="1" 
                   value={selectedPart.extrudeSettings.bevelSegments} 
                   onChange={(e) => updateSelectedPartSettings('bevelSegments', parseInt(e.target.value))}
                   style={{ width: '100%' }}
                 />
               </div>
+
+              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
+                <button 
+                  onClick={snapToPreviousPart}
+                  style={{ width: '100%', padding: '0.5rem', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Auto-Snap to Previous Layer
+                </button>
+              </div>
            </div>
         )}
 
-        {parts.length > 1 && (
+        {parts.filter(p => p.visible).length > 1 && (
            <button 
              onClick={() => setTriggerMerge(Date.now())}
              style={{ 
@@ -171,7 +226,7 @@ function App() {
                cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center'
              }}
            >
-             <Cuboid size={18} /> Merge All Parts (CSG)
+             <Cuboid size={18} /> Merge All Visble Layers (CSG)
            </button>
         )}
       </section>
@@ -183,7 +238,7 @@ function App() {
         </h2>
         <div style={{ flex: 1, position: 'relative', marginTop: '1rem' }}>
            <ModelViewer 
-             parts={parts} 
+             parts={parts.filter(p => p.visible)} 
              selectedPartId={selectedPartId}
              onTransformUpdate={handleTransformUpdate}
              onSelectPart={setSelectedPartId}
