@@ -1,6 +1,6 @@
 # 2D to 3D Converter
 
-The project is a 2D to 3D converter. Users can take a 2D image, and pin point the outline which can then be put into 3D. 
+The project is a 2D to 3D converter. Users can take a 2D image/drawing and Convert to 3D Model
 
 Currently a Work in progress. 
 
